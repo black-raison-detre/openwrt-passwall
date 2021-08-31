@@ -3,7 +3,7 @@ local appname = api.appname
 local datatypes = api.datatypes
 
 m = Map(appname, "V2ray/Xray" .. translate("Shunt") .. translate("Rule"))
-m.redirect = api.url()
+m.redirect = api.url("rule")
 
 s = m:section(NamedSection, arg[1], "shunt_rules", "")
 s.addremove = false

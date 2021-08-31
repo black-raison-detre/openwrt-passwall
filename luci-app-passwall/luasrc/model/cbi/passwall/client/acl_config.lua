@@ -6,6 +6,7 @@ local has_xray = api.is_finded("xray")
 local has_chnlist = api.fs.access("/usr/share/passwall/rules/chnlist")
 
 m = Map(appname)
+m.redirect = api.url("acl")
 
 local nodes_table = {}
 for k, e in ipairs(api.get_valid_nodes()) do
