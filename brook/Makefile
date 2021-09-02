@@ -55,7 +55,7 @@ define Package/brook/config
 
 	config BROOK_COMPRESS_UPX
 		bool "Compress executable files with UPX"
-		default y
+		default n
 endef
 
 ifeq ($(CONFIG_BROOK_COMPRESS_GOPROXY),y)

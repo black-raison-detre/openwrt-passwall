@@ -94,7 +94,7 @@ config XRAY_CORE_COMPRESS_GOPROXY
 
 config XRAY_CORE_COMPRESS_UPX
 	bool "Compress executable files with UPX"
-	default y
+	default n
 endmenu
 endef
 

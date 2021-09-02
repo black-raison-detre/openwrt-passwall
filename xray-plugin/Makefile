@@ -38,7 +38,7 @@ include $(TOPDIR)/feeds/packages/lang/golang/golang-package.mk
 define Package/xray-plugin/config
 config XRAY_PLUGIN_PROVIDE_V2RAY_PLUGIN
 	bool "Provide v2ray-plugin binary using xray-plugin"
-	default n
+	default y
 
 config XRAY_PLUGIN_COMPRESS_GOPROXY
 	bool "Compiling with GOPROXY proxy"
@@ -46,7 +46,7 @@ config XRAY_PLUGIN_COMPRESS_GOPROXY
 
 config XRAY_PLUGIN_COMPRESS_UPX
 	bool "Compress executable files with UPX"
-	default y
+	default n
 endef
 
 ifneq ($(CONFIG_XRAY_PLUGIN_COMPRESS_GOPROXY),)
