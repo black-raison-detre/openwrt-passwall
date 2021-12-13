@@ -51,7 +51,6 @@ config HYSTERIA_COMPRESS_GOPROXY
 config HYSTERIA_COMPRESS_UPX
 	bool "Compress executable files with UPX"
 	default n
-
 endmenu
 
 endef

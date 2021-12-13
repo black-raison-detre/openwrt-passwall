@@ -29,7 +29,7 @@ local ssr_obfs_list = {
 }
 
 local v_ss_encrypt_method_list = {
-    "aes-128-cfb", "aes-256-cfb", "aes-128-gcm", "aes-256-gcm", "chacha20", "chacha20-ietf", "chacha20-poly1305", "chacha20-ietf-poly1305"
+    "aes-128-gcm", "aes-256-gcm", "chacha20-poly1305"
 }
 
 local header_type_list = {
@@ -268,6 +268,8 @@ udp_forward = s:option(Flag, "udp_forward", translate("UDP Forward"))
 udp_forward.default = "1"
 udp_forward.rmempty = false
 udp_forward:depends("type", "SSR")
+udp_forward:depends({ type = "V2ray", protocol = "socks" })
+udp_forward:depends({ type = "Xray", protocol = "socks" })
 
 uuid = s:option(DynamicList, "uuid", translate("ID") .. "/" .. translate("Password"))
 for i = 1, 3 do
