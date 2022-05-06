@@ -8,7 +8,7 @@ m = Map(appname)
 local global_proxy_mode = (m:get("@global[0]", "tcp_proxy_mode") or "") .. (m:get("@global[0]", "udp_proxy_mode") or "")
 
 -- [[ ACLs Settings ]]--
-s = m:section(TypedSection, "acl_rule", translate("ACLs"), "<font color='red'>" .. translate("ACLs is a tools which used to designate specific IP proxy mode, IP or MAC address can be entered.") .. "</font>")
+s = m:section(TypedSection, "acl_rule", translate("ACLs"), "<font color='red'>" .. translate("ACLs is a tools which used to designate specific IP proxy mode.") .. "</font>")
 s.template = "cbi/tblsection"
 s.sortable = true
 s.anonymous = true
@@ -17,6 +17,10 @@ s.extedit = api.url("acl_config", "%s")
 function s.create(e, t)
     t = TypedSection.create(e, t)
     luci.http.redirect(e.extedit:format(t))
+end
+function s.remove(e, t)
+    sys.call("rm -rf /tmp/etc/passwall_tmp/dns_" .. t .. "*")
+    TypedSection.remove(e, t)
 end
 
 ---- Enable
@@ -36,7 +40,7 @@ sys.net.mac_hints(function(e, t)
     }
 end)
 
-o = s:option(DummyValue, "ip_mac", translate("IP/MAC"))
+o = s:option(DummyValue, "sources", translate("Source"))
 o.rawhtml = true
 o.cfgvalue = function(t, n)
     local e = ''

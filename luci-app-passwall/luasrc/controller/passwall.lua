@@ -1,5 +1,5 @@
 -- Copyright (C) 2018-2020 L-WRT Team
--- Copyright (C) 2021 xiaorouji
+-- Copyright (C) 2021-2022 xiaorouji
 
 module("luci.controller.passwall", package.seeall)
 local api = require "luci.model.cbi.passwall.api.api"
@@ -8,11 +8,11 @@ local ucic = luci.model.uci.cursor()
 local http = require "luci.http"
 local util = require "luci.util"
 local i18n = require "luci.i18n"
-local kcptun = require("luci.model.cbi." .. appname ..".api.kcptun")
 local brook = require("luci.model.cbi." .. appname ..".api.brook")
 local v2ray = require("luci.model.cbi." .. appname ..".api.v2ray")
 local xray = require("luci.model.cbi." .. appname ..".api.xray")
 local trojan_go = require("luci.model.cbi." .. appname ..".api.trojan_go")
+local hysteria = require("luci.model.cbi." .. appname ..".api.hysteria")
 
 function index()
 	appname = require "luci.model.cbi.passwall.api.api".appname
@@ -37,7 +37,8 @@ function index()
 	end
 	entry({"admin", "vpn", appname, "app_update"}, cbi(appname .. "/client/app_update"), _("App Update"), 95).leaf = true
 	entry({"admin", "vpn", appname, "rule"}, cbi(appname .. "/client/rule"), _("Rule Manage"), 96).leaf = true
-	entry({"admin", "vpn", appname, "rule_list"}, cbi(appname .. "/client/rule_list"), _("Rule List Manage"), 97).leaf = true
+	entry({"admin", "vpn", appname, "rule_list"}, cbi(appname .. "/client/rule_list"), _("Rule List"), 97).leaf = true
+	entry({"admin", "vpn", appname, "node_subscribe_config"}, cbi(appname .. "/client/node_subscribe_config")).leaf = true
 	entry({"admin", "vpn", appname, "node_config"}, cbi(appname .. "/client/node_config")).leaf = true
 	entry({"admin", "vpn", appname, "shunt_rules"}, cbi(appname .. "/client/shunt_rules")).leaf = true
 	entry({"admin", "vpn", appname, "acl"}, cbi(appname .. "/client/acl"), _("Access control"), 98).leaf = true
@@ -64,15 +65,13 @@ function index()
 	entry({"admin", "vpn", appname, "haproxy_status"}, call("haproxy_status")).leaf = true
 	entry({"admin", "vpn", appname, "socks_status"}, call("socks_status")).leaf = true
 	entry({"admin", "vpn", appname, "connect_status"}, call("connect_status")).leaf = true
-	entry({"admin", "vpn", appname, "check_port"}, call("check_port")).leaf = true
 	entry({"admin", "vpn", appname, "ping_node"}, call("ping_node")).leaf = true
+	entry({"admin", "vpn", appname, "urltest_node"}, call("urltest_node")).leaf = true
 	entry({"admin", "vpn", appname, "set_node"}, call("set_node")).leaf = true
 	entry({"admin", "vpn", appname, "copy_node"}, call("copy_node")).leaf = true
 	entry({"admin", "vpn", appname, "clear_all_nodes"}, call("clear_all_nodes")).leaf = true
 	entry({"admin", "vpn", appname, "delete_select_nodes"}, call("delete_select_nodes")).leaf = true
 	entry({"admin", "vpn", appname, "update_rules"}, call("update_rules")).leaf = true
-	entry({"admin", "vpn", appname, "kcptun_check"}, call("kcptun_check")).leaf = true
-	entry({"admin", "vpn", appname, "kcptun_update"}, call("kcptun_update")).leaf = true
 	entry({"admin", "vpn", appname, "brook_check"}, call("brook_check")).leaf = true
 	entry({"admin", "vpn", appname, "brook_update"}, call("brook_update")).leaf = true
 	entry({"admin", "vpn", appname, "v2ray_check"}, call("v2ray_check")).leaf = true
@@ -81,6 +80,8 @@ function index()
 	entry({"admin", "vpn", appname, "xray_update"}, call("xray_update")).leaf = true
 	entry({"admin", "vpn", appname, "trojan_go_check"}, call("trojan_go_check")).leaf = true
 	entry({"admin", "vpn", appname, "trojan_go_update"}, call("trojan_go_update")).leaf = true
+	entry({"admin", "vpn", appname, "hysteria_check"}, call("hysteria_check")).leaf = true
+	entry({"admin", "vpn", appname, "hysteria_update"}, call("hysteria_update")).leaf = true
 end
 
 local function http_write_json(content)
@@ -141,11 +142,11 @@ end
 
 function get_now_use_node()
 	local e = {}
-	local data, code, msg = nixio.fs.readfile("/var/etc/passwall/id/TCP")
+	local data, code, msg = nixio.fs.readfile("/tmp/etc/passwall/id/TCP")
 	if data then
 		e["TCP"] = util.trim(data)
 	end
-	local data, code, msg = nixio.fs.readfile("/var/etc/passwall/id/UDP")
+	local data, code, msg = nixio.fs.readfile("/tmp/etc/passwall/id/UDP")
 	if data then
 		e["UDP"] = util.trim(data)
 	end
@@ -156,11 +157,11 @@ end
 function get_redir_log()
 	local proto = luci.http.formvalue("proto")
 	proto = proto:upper()
-	if proto == "UDP" and (ucic:get(appname, "@global[0]", "udp_node") or "nil") == "tcp" and not nixio.fs.access("/var/etc/passwall/" .. proto .. ".log") then
+	if proto == "UDP" and (ucic:get(appname, "@global[0]", "udp_node") or "nil") == "tcp" and not nixio.fs.access("/tmp/etc/passwall/" .. proto .. ".log") then
 		proto = "TCP"
 	end
-	if nixio.fs.access("/var/etc/passwall/" .. proto .. ".log") then
-		local content = luci.sys.exec("cat /var/etc/passwall/" .. proto .. ".log")
+	if nixio.fs.access("/tmp/etc/passwall/" .. proto .. ".log") then
+		local content = luci.sys.exec("cat /tmp/etc/passwall/" .. proto .. ".log")
 		content = content:gsub("\n", "<br />")
 		luci.http.write(content)
 	else
@@ -169,18 +170,18 @@ function get_redir_log()
 end
 
 function get_log()
-	-- luci.sys.exec("[ -f /var/log/passwall.log ] && sed '1!G;h;$!d' /var/log/passwall.log > /var/log/passwall_show.log")
-	luci.http.write(luci.sys.exec("[ -f '/var/log/passwall.log' ] && cat /var/log/passwall.log"))
+	-- luci.sys.exec("[ -f /tmp/log/passwall.log ] && sed '1!G;h;$!d' /tmp/log/passwall.log > /tmp/log/passwall_show.log")
+	luci.http.write(luci.sys.exec("[ -f '/tmp/log/passwall.log' ] && cat /tmp/log/passwall.log"))
 end
 
 function clear_log()
-	luci.sys.call("echo '' > /var/log/passwall.log")
+	luci.sys.call("echo '' > /tmp/log/passwall.log")
 end
 
 function status()
 	-- local dns_mode = ucic:get(appname, "@global[0]", "dns_mode")
 	local e = {}
-	e.dns_mode_status = luci.sys.call("netstat -apn | grep ':7913 ' >/dev/null") == 0
+	e.dns_mode_status = luci.sys.call("netstat -apn | grep ':15353 ' >/dev/null") == 0
 	e.haproxy_status = luci.sys.call(string.format("top -bn1 | grep -v grep | grep '%s/bin/' | grep haproxy >/dev/null", appname)) == 0
 	e["tcp_node_status"] = luci.sys.call(string.format("top -bn1 | grep -v -E 'grep|acl/|acl_' | grep '%s/bin/' | grep -i 'TCP' >/dev/null", appname)) == 0
 
@@ -242,10 +243,32 @@ function ping_node()
 	e.index = index
 	local nodes_ping = ucic:get(appname, "@global_other[0]", "nodes_ping") or ""
 	if nodes_ping:find("tcping") and luci.sys.exec("echo -n $(command -v tcping)") ~= "" then
+		if api.is_ipv6(address) then
+			address = api.get_ipv6_only(address)
+		end
 		e.ping = luci.sys.exec(string.format("echo -n $(tcping -q -c 1 -i 1 -t 2 -p %s %s 2>&1 | grep -o 'time=[0-9]*' | awk -F '=' '{print $2}') 2>/dev/null", port, address))
 	end
 	if e.ping == nil or tonumber(e.ping) == 0 then
 		e.ping = luci.sys.exec("echo -n $(ping -c 1 -W 1 %q 2>&1 | grep -o 'time=[0-9]*' | awk -F '=' '{print $2}') 2>/dev/null" % address)
+	end
+	luci.http.prepare_content("application/json")
+	luci.http.write_json(e)
+end
+
+function urltest_node()
+	local index = luci.http.formvalue("index")
+	local id = luci.http.formvalue("id")
+	local e = {}
+	e.index = index
+	local result = luci.sys.exec(string.format("/usr/share/passwall/test.sh url_test_node %s %s", id, "urltest_node"))
+	local code = tonumber(luci.sys.exec("echo -n '" .. result .. "' | awk -F ':' '{print $1}'") or "0")
+	if code ~= 0 then
+		local use_time = luci.sys.exec("echo -n '" .. result .. "' | awk -F ':' '{print $2}'")
+		if use_time:find("%.") then
+			e.use_time = string.format("%.2f", use_time * 1000)
+		else
+			e.use_time = string.format("%.2f", use_time / 1000)
+		end
 	end
 	luci.http.prepare_content("application/json")
 	luci.http.write_json(e)
@@ -343,39 +366,6 @@ function delete_select_nodes()
 	luci.sys.call("/etc/init.d/" .. appname .. " restart > /dev/null 2>&1 &")
 end
 
-function check_port()
-	function socket_connect(type, address, port)
-		local socket = nixio.socket(type, "stream")
-		socket:setopt("socket", "rcvtimeo", 3)
-		socket:setopt("socket", "sndtimeo", 3)
-		local ret = socket:connect(address, port)
-		if socket then socket:close() end
-		if tostring(ret) == "true" then
-			return true
-		end
-		return false
-	end
-	local result = {}
-	ucic:foreach(appname, "nodes", function(s)
-		if (s.use_kcp and s.use_kcp == "1" and s.kcp_port) or (s.transport and s.transport == "mkcp" and s.port) then
-		else
-			local type = s.type
-			if type and s.address and s.port and s.remarks then
-				local ip_type = api.get_ip_type(s.address)
-				local o = {}
-				o.remark = "%s：[%s] %s:%s" % {s.type, s.remarks, ip_type == "6" and '[' .. s.address .. ']' or s.address, s.port}
-				o.flag = socket_connect(ip_type == "6" and "inet6" or "inet", s.address, s.port)
-				if not o.flag and ip_type == "" then
-					o.flag = socket_connect("inet6", s.address, s.port)
-				end
-				result[#result + 1] = o
-			end
-		end
-	end)
-	luci.http.prepare_content("application/json")
-	luci.http.write_json(result)
-end
-
 function update_rules()
 	local update = luci.http.formvalue("update")
 	luci.sys.call("lua /usr/share/passwall/rule_update.lua log '" .. update .. "' > /dev/null 2>&1 &")
@@ -391,8 +381,8 @@ end
 
 function server_user_log()
 	local id = luci.http.formvalue("id")
-	if nixio.fs.access("/var/etc/passwall_server/" .. id .. ".log") then
-		local content = luci.sys.exec("cat /var/etc/passwall_server/" .. id .. ".log")
+	if nixio.fs.access("/tmp/etc/passwall_server/" .. id .. ".log") then
+		local content = luci.sys.exec("cat /tmp/etc/passwall_server/" .. id .. ".log")
 		content = content:gsub("\n", "<br />")
 		luci.http.write(content)
 	else
@@ -401,30 +391,11 @@ function server_user_log()
 end
 
 function server_get_log()
-	luci.http.write(luci.sys.exec("[ -f '/var/log/passwall_server.log' ] && cat /var/log/passwall_server.log"))
+	luci.http.write(luci.sys.exec("[ -f '/tmp/log/passwall_server.log' ] && cat /tmp/log/passwall_server.log"))
 end
 
 function server_clear_log()
-	luci.sys.call("echo '' > /var/log/passwall_server.log")
-end
-
-function kcptun_check()
-	local json = kcptun.to_check("")
-	http_write_json(json)
-end
-
-function kcptun_update()
-	local json = nil
-	local task = http.formvalue("task")
-	if task == "extract" then
-		json = kcptun.to_extract(http.formvalue("file"), http.formvalue("subfix"))
-	elseif task == "move" then
-		json = kcptun.to_move(http.formvalue("file"))
-	else
-		json = kcptun.to_download(http.formvalue("url"))
-	end
-
-	http_write_json(json)
+	luci.sys.call("echo '' > /tmp/log/passwall_server.log")
 end
 
 function brook_check()
@@ -438,7 +409,7 @@ function brook_update()
 	if task == "move" then
 		json = brook.to_move(http.formvalue("file"))
 	else
-		json = brook.to_download(http.formvalue("url"))
+		json = brook.to_download(http.formvalue("url"), http.formvalue("size"))
 	end
 
 	http_write_json(json)
@@ -457,7 +428,7 @@ function v2ray_update()
 	elseif task == "move" then
 		json = v2ray.to_move(http.formvalue("file"))
 	else
-		json = v2ray.to_download(http.formvalue("url"))
+		json = v2ray.to_download(http.formvalue("url"), http.formvalue("size"))
 	end
 
 	http_write_json(json)
@@ -476,7 +447,7 @@ function xray_update()
 	elseif task == "move" then
 		json = xray.to_move(http.formvalue("file"))
 	else
-		json = xray.to_download(http.formvalue("url"))
+		json = xray.to_download(http.formvalue("url"), http.formvalue("size"))
 	end
 
 	http_write_json(json)
@@ -495,8 +466,26 @@ function trojan_go_update()
 	elseif task == "move" then
 		json = trojan_go.to_move(http.formvalue("file"))
 	else
-		json = trojan_go.to_download(http.formvalue("url"))
+		json = trojan_go.to_download(http.formvalue("url"), http.formvalue("size"))
 	end
 
 	http_write_json(json)
 end
+
+function hysteria_check()
+	local json = hysteria.to_check("")
+	http_write_json(json)
+end
+
+function hysteria_update()
+	local json = nil
+	local task = http.formvalue("task")
+	if task == "move" then
+		json = hysteria.to_move(http.formvalue("file"))
+	else
+		json = hysteria.to_download(http.formvalue("url"), http.formvalue("size"))
+	end
+
+	http_write_json(json)
+end
+

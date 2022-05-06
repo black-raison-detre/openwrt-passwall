@@ -5,10 +5,9 @@ require 'luci.sys'
 local luci = luci
 local ucic = luci.model.uci.cursor()
 local jsonc = require "luci.jsonc"
-local i18n = require "luci.i18n"
 local name = 'passwall'
+local api = require ("luci.model.cbi." .. name .. ".api.api")
 local arg1 = arg[1]
-local b64decode = nixio.bin.b64decode
 
 local rule_path = "/usr/share/" .. name .. "/rules"
 local reboot = 0
@@ -33,13 +32,13 @@ local chnroute6_url =  ucic:get(name, "@global_rules[0]", "chnroute6_url") or {"
 local chnlist_url = ucic:get(name, "@global_rules[0]", "chnlist_url") or {"https://cdn.jsdelivr.net/gh/felixonmars/dnsmasq-china-list/accelerated-domains.china.conf","https://cdn.jsdelivr.net/gh/felixonmars/dnsmasq-china-list/apple.china.conf","https://cdn.jsdelivr.net/gh/felixonmars/dnsmasq-china-list/google.china.conf"}
 local geoip_api =  "https://api.github.com/repos/Loyalsoldier/v2ray-rules-dat/releases/latest"
 local geosite_api =  "https://api.github.com/repos/Loyalsoldier/v2ray-rules-dat/releases/latest"
-local v2ray_asset_location = ucic:get_first(name, 'global_rules', "v2ray_location_asset", "/usr/share/xray/")
+local v2ray_asset_location = ucic:get_first(name, 'global_rules', "v2ray_location_asset", "/usr/share/v2ray/")
 
 local log = function(...)
     if arg1 then
         local result = os.date("%Y-%m-%d %H:%M:%S: ") .. table.concat({...}, " ")
         if arg1 == "log" then
-            local f, err = io.open("/var/log/passwall.log", "a")
+            local f, err = io.open("/tmp/log/passwall.log", "a")
             if f and err == nil then
                 f:write(result .. "\n")
                 f:close()
@@ -48,24 +47,6 @@ local log = function(...)
             print(result)
         end
     end
-end
-
--- base64decoding
-local function base64Decode(text)
-	local raw = text
-	if not text then return '' end
-	text = text:gsub("%z", "")
-	text = text:gsub("%c", "")
-	text = text:gsub("_", "/")
-	text = text:gsub("-", "+")
-	local mod4 = #text % 4
-	text = text .. string.sub('====', mod4 + 1)
-	local result = b64decode(text)
-	if result then
-		return result:gsub("%z", "")
-	else
-		return raw
-	end
 end
 
 -- trim
@@ -122,7 +103,7 @@ local function fetch_rule(rule_name,rule_type,url,exclude_domain)
 			if rule_name == "gfwlist" then
 				local domains = {}
 				local gfwlist = io.open(download_file_tmp..k, "r")
-				local decode = base64Decode(gfwlist:read("*all"))
+				local decode = api.base64Decode(gfwlist:read("*all"))
 				gfwlist:close()
 
 				gfwlist = io.open(download_file_tmp..k, "w")

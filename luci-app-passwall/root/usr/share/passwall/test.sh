@@ -1,7 +1,9 @@
 #!/bin/sh
 
 CONFIG=passwall
-LOG_FILE=/var/log/$CONFIG.log
+LOG_FILE=/tmp/log/$CONFIG.log
+LOCK_FILE_DIR=/tmp/lock
+LOCK_FILE=${LOCK_FILE_DIR}/${CONFIG}_script.lock
 
 echolog() {
 	local d="$(date "+%Y-%m-%d %H:%M:%S")"
@@ -60,6 +62,33 @@ test_proxy() {
 	echo $result
 }
 
+url_test_node() {
+	result=0
+	local node_id=$1
+	local _type=$(echo $(config_n_get ${node_id} type nil) | tr 'A-Z' 'a-z')
+	[ "${_type}" != "nil" ] && {
+		if [ "${_type}" == "socks" ]; then
+			local _address=$(config_n_get ${node_id} address)
+			local _port=$(config_n_get ${node_id} port)
+			[ -n "${_address}" ] && [ -n "${_port}" ] && {
+				local curlx="socks5h://${_address}:${_port}"
+				local _username=$(config_n_get ${node_id} username)
+				local _password=$(config_n_get ${node_id} password)
+				[ -n "${_username}" ] && [ -n "${_password}" ] && curlx="socks5h://${_username}:${_password}@${_address}:${_port}"
+			}
+		else
+			local _tmp_port=$(/usr/share/${CONFIG}/app.sh get_new_port 61080 tcp)
+			/usr/share/${CONFIG}/app.sh run_socks flag="url_test_${node_id}" node=${node_id} bind=127.0.0.1 socks_port=${_tmp_port} config_file=url_test_${node_id}.json
+			local curlx="socks5h://127.0.0.1:${_tmp_port}"
+		fi
+		sleep 1s
+		result=$(curl --connect-timeout 3 -o /dev/null -I -skL -w "%{http_code}:%{time_starttransfer}" -x $curlx "https://www.google.com/generate_204")
+		pgrep -af "url_test_${node_id}" | awk '! /test\.sh/{print $1}' | xargs kill -9 >/dev/null 2>&1
+		rm -rf "/tmp/etc/${CONFIG}/url_test_${node_id}.json"
+	}
+	echo $result
+}
+
 test_node() {
 	local node_id=$1
 	local _type=$(echo $(config_n_get ${node_id} type nil) | tr 'A-Z' 'a-z')
@@ -75,12 +104,13 @@ test_node() {
 			}
 		else
 			local _tmp_port=$(/usr/share/${CONFIG}/app.sh get_new_port 61080 tcp)
-			/usr/share/${CONFIG}/app.sh run_socks flag=auto_switch node=$node_id bind=127.0.0.1 socks_port=${_tmp_port} config_file=/var/etc/${CONFIG}/test.json
+			/usr/share/${CONFIG}/app.sh run_socks flag="test_node_${node_id}" node=${node_id} bind=127.0.0.1 socks_port=${_tmp_port} config_file=test_node_${node_id}.json
 			local curlx="socks5h://127.0.0.1:${_tmp_port}"
 		fi
+		sleep 1s
 		_proxy_status=$(test_url "https://www.google.com/generate_204" ${retry_num} ${connect_timeout} "-x $curlx")
-		pgrep -f "/var/etc/${CONFIG}/test\.json|auto_switch" | xargs kill -9 >/dev/null 2>&1
-		rm -rf "/var/etc/${CONFIG}/test.json"
+		pgrep -af "test_node_${node_id}" | awk '! /test\.sh/{print $1}' | xargs kill -9 >/dev/null 2>&1
+		rm -rf "/tmp/etc/${CONFIG}/test_node_${node_id}.json"
 		if [ "${_proxy_status}" -eq 200 ]; then
 			return 0
 		fi
@@ -97,13 +127,13 @@ test_auto_switch() {
 	local b_tcp_nodes=$2
 	local now_node=$3
 	[ -z "$now_node" ] && {
-		if [ -f "/var/etc/$CONFIG/id/${TYPE}" ]; then
-			now_node=$(cat /var/etc/$CONFIG/id/${TYPE})
+		if [ -f "/tmp/etc/$CONFIG/id/${TYPE}" ]; then
+			now_node=$(cat /tmp/etc/$CONFIG/id/${TYPE})
 			if [ "$(config_n_get $now_node protocol nil)" = "_shunt" ]; then
-				if [ "$shunt_logic" == "1" ] && [ -f "/var/etc/$CONFIG/id/${TYPE}_default" ]; then
-					now_node=$(cat /var/etc/$CONFIG/id/${TYPE}_default)
-				elif [ "$shunt_logic" == "2" ] && [ -f "/var/etc/$CONFIG/id/${TYPE}_main" ]; then
-					now_node=$(cat /var/etc/$CONFIG/id/${TYPE}_main)
+				if [ "$shunt_logic" == "1" ] && [ -f "/tmp/etc/$CONFIG/id/${TYPE}_default" ]; then
+					now_node=$(cat /tmp/etc/$CONFIG/id/${TYPE}_default)
+				elif [ "$shunt_logic" == "2" ] && [ -f "/tmp/etc/$CONFIG/id/${TYPE}_main" ]; then
+					now_node=$(cat /tmp/etc/$CONFIG/id/${TYPE}_main)
 				else
 					shunt_logic=0
 				fi
@@ -132,7 +162,7 @@ test_auto_switch() {
 		[ $? -eq 0 ] && {
 			#主节点正常，切换到主节点
 			echolog "自动切换检测：${TYPE}主节点【$(config_n_get $main_node type)：[$(config_n_get $main_node remarks)]】正常，切换到主节点！"
-			/usr/share/${CONFIG}/app.sh node_switch ${TYPE} ${main_node} ${shunt_logic} 1
+			/usr/share/${CONFIG}/app.sh node_switch flag=${TYPE} new_node=${main_node} shunt_logic=${shunt_logic}
 			[ $? -eq 0 ] && {
 				echolog "自动切换检测：${TYPE}节点切换完毕！"
 				[ "$shunt_logic" != "0" ] && {
@@ -180,7 +210,7 @@ test_auto_switch() {
 				uci commit $CONFIG
 			}
 			echolog "自动切换检测：${TYPE}节点【$(config_n_get $new_node type)：[$(config_n_get $new_node remarks)]】正常，切换到此节点！"
-			/usr/share/${CONFIG}/app.sh node_switch ${TYPE} ${new_node} ${shunt_logic} 1
+			/usr/share/${CONFIG}/app.sh node_switch flag=${TYPE} new_node=${new_node} shunt_logic=${shunt_logic}
 			[ $? -eq 0 ] && {
 				[ "$restore_switch" == "1" ] && [ "$shunt_logic" != "0" ] && {
 					local tcp_node=$(config_t_get global tcp_node nil)
@@ -203,27 +233,28 @@ test_auto_switch() {
 }
 
 start() {
-	if [ "$(pgrep -f $CONFIG/test.sh | wc -l)" -gt 2 ]; then
-		exit 1
-	fi
 	ENABLED=$(config_t_get global enabled 0)
 	[ "$ENABLED" != 1 ] && return 1
 	ENABLED=$(config_t_get auto_switch enable 0)
 	[ "$ENABLED" != 1 ] && return 1
 	delay=$(config_t_get auto_switch testing_time 1)
-	#sleep ${delay}m
 	#sleep 9s
 	connect_timeout=$(config_t_get auto_switch connect_timeout 3)
 	retry_num=$(config_t_get auto_switch retry_num 3)
 	restore_switch=$(config_t_get auto_switch restore_switch 0)
 	shunt_logic=$(config_t_get auto_switch shunt_logic 0)
-	while [ "$ENABLED" -eq 1 ]
-	do
+	while [ "$ENABLED" -eq 1 ]; do
+		[ -f "$LOCK_FILE" ] && {
+			sleep 6s
+			continue
+		}
+		touch $LOCK_FILE
 		TCP_NODE=$(config_t_get auto_switch tcp_node nil)
 		[ -n "$TCP_NODE" -a "$TCP_NODE" != "nil" ] && {
 			TCP_NODE=$(echo $TCP_NODE | tr -s ' ' '\n' | uniq | tr -s '\n' ' ')
 			test_auto_switch TCP "$TCP_NODE"
 		}
+		rm -f $LOCK_FILE
 		sleep ${delay}m
 	done
 }
@@ -233,6 +264,9 @@ shift
 case $arg1 in
 test_url)
 	test_url $@
+	;;
+url_test_node)
+	url_test_node $@
 	;;
 *)
 	start

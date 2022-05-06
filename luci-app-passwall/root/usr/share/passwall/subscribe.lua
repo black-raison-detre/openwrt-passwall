@@ -17,7 +17,7 @@ local datatypes = require "luci.cbi.datatypes"
 local tinsert = table.insert
 local ssub, slen, schar, sbyte, sformat, sgsub = string.sub, string.len, string.char, string.byte, string.format, string.gsub
 local jsonParse, jsonStringify = luci.jsonc.parse, luci.jsonc.stringify
-local b64decode = nixio.bin.b64decode
+local base64Decode = api.base64Decode
 local uci = luci.model.uci.cursor()
 uci:revert(appname)
 
@@ -37,15 +37,41 @@ local filter_keyword_keep_list_default = uci:get(appname, "@global_subscribe[0]"
 local function is_filter_keyword(value)
 	if filter_keyword_mode_default == "1" then
 		for k,v in ipairs(filter_keyword_discard_list_default) do
-			if value:find(v) then
+			if value:find(v, 1, true) then
 				return true
 			end
 		end
 	elseif filter_keyword_mode_default == "2" then
 		local result = true
 		for k,v in ipairs(filter_keyword_keep_list_default) do
-			if value:find(v) then
+			if value:find(v, 1, true) then
 				result = false
+			end
+		end
+		return result
+	elseif filter_keyword_mode_default == "3" then
+		local result = false
+		for k,v in ipairs(filter_keyword_discard_list_default) do
+			if value:find(v, 1, true) then
+				result = true
+			end
+		end
+		for k,v in ipairs(filter_keyword_keep_list_default) do
+			if value:find(v, 1, true) then
+				result = false
+			end
+		end
+		return result
+	elseif filter_keyword_mode_default == "4" then
+		local result = true
+		for k,v in ipairs(filter_keyword_keep_list_default) do
+			if value:find(v, 1, true) then
+				result = false
+			end
+		end
+		for k,v in ipairs(filter_keyword_discard_list_default) do
+			if value:find(v, 1, true) then
+				result = true
 			end
 		end
 		return result
@@ -56,16 +82,12 @@ end
 local nodeResult = {} -- update result
 local debug = false
 
-local ss_rust_encrypt_method_list = {
-    "aes-128-gcm", "aes-256-gcm", "chacha20-ietf-poly1305"
-}
-
 local log = function(...)
 	local result = os.date("%Y-%m-%d %H:%M:%S: ") .. table.concat({...}, " ")
 	if debug == true then
 		print(result)
 	else
-		local f, err = io.open("/var/log/" .. appname .. ".log", "a")
+		local f, err = io.open("/tmp/log/" .. appname .. ".log", "a")
 		if f and err == nil then
 			f:write(result .. "\n")
 			f:close()
@@ -202,7 +224,9 @@ do
 
 			local rules = {}
 			uci:foreach(appname, "shunt_rules", function(e)
-				table.insert(rules, e)
+				if e[".name"] and e.remarks then
+					table.insert(rules, e)
+				end
 			end)
 			table.insert(rules, {
 				[".name"] = "default_node",
@@ -324,22 +348,6 @@ local function trim(text)
 	return (sgsub(text, "^%s*(.-)%s*$", "%1"))
 end
 
--- base64
-local function base64Decode(text)
-	local raw = text
-	if not text then return '' end
-	text = text:gsub("%z", "")
-	text = text:gsub("_", "/")
-	text = text:gsub("-", "+")
-	local mod4 = #text % 4
-	text = text .. string.sub('====', mod4 + 1)
-	local result = b64decode(text)
-	if result then
-		return result:gsub("%z", "")
-	else
-		return raw
-	end
-end
 -- 处理数据
 local function processData(szType, content, add_mode, add_from)
 	--log(content, add_mode, add_from)
@@ -352,12 +360,16 @@ local function processData(szType, content, add_mode, add_from)
 		local dat = split(content, "/%?")
 		local hostInfo = split(dat[1], ':')
 		result.type = "SSR"
-		result.address = hostInfo[1]
-		result.port = hostInfo[2]
-		result.protocol = hostInfo[3]
-		result.method = hostInfo[4]
-		result.obfs = hostInfo[5]
-		result.password = base64Decode(hostInfo[6])
+		result.address = ""
+		for i=1,#hostInfo-5,1 do
+			result.address = result.address .. hostInfo[i] .. ":"
+		end
+		result.address = string.sub(result.address, 0, #result.address-1) 
+		result.port = hostInfo[#hostInfo-4]
+		result.protocol = hostInfo[#hostInfo-3]
+		result.method = hostInfo[#hostInfo-2]
+		result.obfs = hostInfo[#hostInfo-1]
+		result.password = base64Decode(hostInfo[#hostInfo])	
 		local params = {}
 		for _, v in pairs(split(dat[2], '&')) do
 			local t = split(v, '=')
@@ -378,7 +390,6 @@ local function processData(szType, content, add_mode, add_from)
 		result.address = info.add
 		result.port = info.port
 		result.protocol = 'vmess'
-		result.alter_id = info.aid
 		result.uuid = info.id
 		result.remarks = info.ps
 		-- result.mux = 1
@@ -483,25 +494,34 @@ local function processData(szType, content, add_mode, add_from)
 		result.method = method
 		result.password = password
 
-		local flag = false
-		for k, v in ipairs(ss_rust_encrypt_method_list) do
-			if method:upper() == v:upper() then
-				flag = true
+		local aead = false
+		for k, v in ipairs({"aes-128-gcm", "aes-256-gcm", "chacha20-poly1305", "chacha20-ietf-poly1305"}) do
+			if method:lower() == v:lower() then
+				aead = true
 			end
 		end
-		if flag then
+		if aead then
 			if ss_aead_type_default == "shadowsocks-libev" and has_ss then
 				result.type = "SS"
 			elseif ss_aead_type_default == "shadowsocks-rust" and has_ss_rust then
 				result.type = 'SS-Rust'
+				if method:lower() == "chacha20-poly1305" then
+					result.method = "chacha20-ietf-poly1305"
+				end
 			elseif ss_aead_type_default == "v2ray" and has_v2ray and not result.plugin then
 				result.type = 'V2ray'
 				result.protocol = 'shadowsocks'
 				result.transport = 'tcp'
+				if method:lower() == "chacha20-ietf-poly1305" then
+					result.method = "chacha20-poly1305"
+				end
 			elseif ss_aead_type_default == "xray" and has_xray and not result.plugin then
 				result.type = 'Xray'
 				result.protocol = 'shadowsocks'
 				result.transport = 'tcp'
+				if method:lower() == "chacha20-ietf-poly1305" then
+					result.method = "chacha20-poly1305"
+				end
 			end
 		end
 	elseif szType == "trojan" then
@@ -741,6 +761,38 @@ local function processData(szType, content, add_mode, add_from)
 			result.port = port
 			result.tls_allowInsecure = allowInsecure_default and "1" or "0"
 		end
+	elseif szType == 'hysteria' then
+		local alias = ""
+		if content:find("#") then
+			local idx_sp = content:find("#")
+			alias = content:sub(idx_sp + 1, -1)
+			content = content:sub(0, idx_sp - 1)
+		end
+		result.remarks = UrlDecode(alias)
+		result.type = "Hysteria"
+		
+		local dat = split(content, '%?')
+		local hostInfo = split(dat[1], ':')
+		result.address = hostInfo[1]
+		result.port = hostInfo[2]
+		local params = {}
+		for _, v in pairs(split(dat[2], '&')) do
+			local t = split(v, '=')
+			if #t > 0 then
+				params[t[1]] = t[2]
+			end
+		end
+		result.hysteria_protocol = params.protocol
+		result.hysteria_obfs = params.obfsParam
+		result.hysteria_auth_type = "string"
+		result.hysteria_auth_password = params.auth
+		result.tls_serverName = params.peer
+		if params.insecure and params.insecure == "1" then
+			result.tls_allowInsecure = "1"
+		end
+		result.hysteria_alpn = params.alpn
+		result.hysteria_up_mbps = params.upmbps
+		result.hysteria_down_mbps = params.downmbps
 	else
 		log('暂时不支持' .. szType .. "类型的节点订阅，跳过此节点。")
 		return nil
@@ -937,7 +989,7 @@ local function update_node(manual)
 	if manual == 0 and #group > 0 then
 		uci:foreach(appname, "nodes", function(node)
 			-- 如果是未发现新节点或手动导入的节点就不要删除了...
-			if (node.add_from and group:find(node.add_from)) and node.add_mode == "2" then
+			if (node.add_from and group:find(node.add_from, 1, true)) and node.add_mode == "2" then
 				uci:delete(appname, node['.name'])
 			end
 		end)
@@ -1045,7 +1097,7 @@ local function parse_link(raw, add_mode, add_from)
 				if result then
 					if not result.type then
 						log('丢弃节点:' .. result.remarks .. ",找不到可使用二进制.")
-					elseif (add_mode == "2" and is_filter_keyword(result.remarks)) or not result.address or result.remarks == "NULL" or
+					elseif (add_mode == "2" and is_filter_keyword(result.remarks)) or not result.address or result.remarks == "NULL" or result.address=="127.0.0.1" or
 							(not datatypes.hostname(result.address) and not (datatypes.ipmask4(result.address) or datatypes.ipmask6(result.address))) then
 						log('丢弃过滤节点: ' .. result.type .. ' 节点, ' .. result.remarks)
 					else
@@ -1073,16 +1125,23 @@ local execute = function()
 		local subscribe_list = {}
 		local retry = {}
 		if arg[2] then
-			subscribe_list[#subscribe_list + 1] = uci:get_all(appname, arg[2]) or {}
+			string.gsub(arg[2], '[^' .. "," .. ']+', function(w)
+				subscribe_list[#subscribe_list + 1] = uci:get_all(appname, w) or {}
+			end)
+		else
+			uci:foreach(appname, "subscribe_list", function(o)
+				subscribe_list[#subscribe_list + 1] = o
+			end)
 		end
 
 		for index, value in ipairs(subscribe_list) do
+			local cfgid = value[".name"]
 			local remark = value.remark
 			local url = value.url
 			if value.allowInsecure and value.allowInsecure ~= "1" then
 				allowInsecure_default = nil
 			end
-			local filter_keyword_mode = value.filter_keyword_mode or "3"
+			local filter_keyword_mode = value.filter_keyword_mode or "5"
 			if filter_keyword_mode == "0" then
 				filter_keyword_mode_default = "0"
 			elseif filter_keyword_mode == "1" then
@@ -1091,6 +1150,14 @@ local execute = function()
 			elseif filter_keyword_mode == "2" then
 				filter_keyword_mode_default = "2"
 				filter_keyword_keep_list_default = value.filter_keep_list or {}
+			elseif filter_keyword_mode == "3" then
+				filter_keyword_mode_default = "3"
+				filter_keyword_keep_list_default = value.filter_keep_list or {}
+				filter_keyword_discard_list_default = value.filter_discard_list or {}
+			elseif filter_keyword_mode == "4" then
+				filter_keyword_mode_default = "4"
+				filter_keyword_keep_list_default = value.filter_keep_list or {}
+				filter_keyword_discard_list_default = value.filter_discard_list or {}
 			end
 			local ss_aead_type = value.ss_aead_type or "global"
 			if ss_aead_type ~= "global" then
@@ -1102,13 +1169,13 @@ local execute = function()
 			end
 			local ua = value.user_agent
 			log('正在订阅:【' .. remark .. '】' .. url)
-			local raw = curl(url, "/tmp/" .. remark, ua)
+			local raw = curl(url, "/tmp/" .. cfgid, ua)
 			if raw == 0 then
-				local f = io.open("/tmp/" .. remark, "r")
+				local f = io.open("/tmp/" .. cfgid, "r")
 				local stdout = f:read("*all")
 				f:close()
 				raw = trim(stdout)
-				os.remove("/tmp/" .. remark)
+				os.remove("/tmp/" .. cfgid)
 				parse_link(raw, "2", remark)
 			else
 				retry[#retry + 1] = value

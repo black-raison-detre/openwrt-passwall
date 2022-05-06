@@ -46,6 +46,7 @@ use_sysroot=false
 
 use_allocator=\"none\"
 use_allocator_shim=false
+use_partition_alloc=false
 
 fatal_linker_warnings=false
 treat_warnings_as_errors=false
@@ -54,7 +55,6 @@ enable_base_tracing=false
 use_udev=false
 use_aura=false
 use_ozone=false
-use_x11=false
 use_gio=false
 use_platform_icu_alternatives=true
 use_glib=false
@@ -65,6 +65,7 @@ use_kerberos=false
 enable_mdns=false
 enable_reporting=false
 include_transport_security_state_preload_list=false
+use_nss_certs=false
 
 target_os=\"openwrt\"
 target_cpu=\"${naive_arch}\"
@@ -83,6 +84,11 @@ case "${target_arch}" in
 	else
 		naive_flags+=" arm_float_abi=\"soft\" arm_use_neon=false"
 	fi
+	case "${cpu_type}" in
+	"arm1176jzf-s"|"arm926ej-s"|"mpcore"|"xscale")
+		naive_flags+=" arm_use_thumb=false"
+		;;
+	esac
 	;;
 "mipsel"|"mips64el")
 	naive_flags+=" use_gold=false use_thin_lto=false use_lld=false chrome_pgo_phase=0 mips_arch_variant=\"r2\""
