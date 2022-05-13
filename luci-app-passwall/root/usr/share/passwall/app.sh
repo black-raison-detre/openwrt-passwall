@@ -37,6 +37,14 @@ API_GEN_V2RAY_PROTO=$LUA_API_PATH/gen_v2ray_proto.lua
 API_GEN_TROJAN=$LUA_API_PATH/gen_trojan.lua
 API_GEN_NAIVE=$LUA_API_PATH/gen_naiveproxy.lua
 API_GEN_HYSTERIA=$LUA_API_PATH/gen_hysteria.lua
+sys_lang="$(uci -q get luci.main.lang)"
+
+log_lang() {
+	case "$sys_lang" in
+		*zh*) echo 1 ;;
+		*)    echo 0 ;;
+	esac	
+}
 
 echolog() {
 	local d="$(date "+%Y-%m-%d %H:%M:%S")"
@@ -249,10 +257,22 @@ ln_run() {
 			ln -s "${file_func}" "${TMP_BIN_PATH}/${ln_name}" >/dev/null 2>&1
 			file_func="${TMP_BIN_PATH}/${ln_name}"
 		}
-		[ -x "${file_func}" ] || echolog "  - $(readlink ${file_func}) 没有执行权限，无法启动：${file_func} $*"
+		[ -x "${file_func}" ] || {
+			if [ $(log_lang) -eq 1 ]; then
+				echolog "  - $(readlink ${file_func}) 没有执行权限，无法启动：${file_func} $*"
+			else
+				echolog "  - $(readlink ${file_func}) not executable，cannot start：${file_func} $*"
+			fi
+		}
 	fi
 	#echo "${file_func} $*" >&2
-	[ -n "${file_func}" ] || echolog "  - 找不到 ${ln_name}，无法启动..."
+	[ -n "${file_func}" ] || {
+		if [ $(log_lang) -eq 1 ]; then
+			echolog "  - 找不到 ${ln_name}，无法启动..."
+		else
+			echolog "  - file missing ${ln_name}，cannot start..."
+		fi
+	}
 	${file_func:-echolog "  - ${ln_name}"} "$@" >${output} 2>&1 &
 	process_count=$(ls $TMP_SCRIPT_FUNC_PATH | wc -l)
 	process_count=$((process_count + 1))
@@ -406,23 +426,43 @@ run_socks() {
 	if [ -n "$server_host" ] && [ -n "$port" ]; then
 		check_host $server_host
 		[ $? != 0 ] && {
-			echolog "  - Socks节点：[$remarks]${server_host} 是非法的服务器地址，无法启动！"
+			if [ $(log_lang) -eq 1 ]; then
+				echolog "  - Socks节点：[$remarks]${server_host} 是非法的服务器地址，无法启动！"
+			else
+				echolog "  - Socks Node：[$remarks]${server_host} invalid server address，start up fail! "
+			fi
 			return 1
 		}
 		tmp="${server_host}:${port}"
 	else
-		error_msg="某种原因，此 Socks 服务的相关配置已失联，启动中止！"
+		if [ $(log_lang) -eq 1 ]; then
+			error_msg="某种原因，此 Socks 服务的相关配置已失联，启动中止！"
+		else
+			error_msg="No server settings！"
+		fi
 	fi
 
-	if ([ "$type" == "v2ray" ] || [ "$type" == "xray" ]) && ([ -n "$(config_n_get $node balancing_node)" ] || [ "$(config_n_get $node default_node)" != "_direct" -a "$(config_n_get $node default_node)" != "_blackhole" ]); then
+	if ([ "$type" = "v2ray" ] || [ "$type" = "xray" ]) && ([ -n "$(config_n_get $node balancing_node)" ] || [ "$(config_n_get $node default_node)" != "_direct" -a "$(config_n_get $node default_node)" != "_blackhole" ]); then
 		unset error_msg
 	fi
 
 	[ -n "${error_msg}" ] && {
-		[ "$bind" != "127.0.0.1" ] && echolog "  - Socks节点：[$remarks]${tmp}，启动中止 ${bind}:${socks_port} ${error_msg}"
-		return 1
+		[ "$bind" != "127.0.0.1" ] && {
+			if [ $(log_lang) -eq 1 ]; then
+				echolog "  - Socks节点：[$remarks]${tmp}，启动中止 ${bind}:${socks_port} ${error_msg}"
+			else
+				echolog "  - Socks Node：[$remarks]${tmp}，start up halted ${bind}:${socks_port} ${error_msg}"
+			fi
+			return 1
+		}
 	}
-	[ "$bind" != "127.0.0.1" ] && echolog "  - Socks节点：[$remarks]${tmp}，启动 ${bind}:${socks_port}"
+	[ "$bind" != "127.0.0.1" ] && {
+		if [ $(log_lang) -eq 1 ]; then
+			echolog "  - Socks节点：[$remarks]${tmp}，启动 ${bind}:${socks_port}"
+		else
+			echolog "  - Socks Node：[$remarks]${tmp}，start ${bind}:${socks_port}"
+		fi
+	}
 
 	case "$type" in
 	socks)
@@ -547,10 +587,20 @@ run_redir() {
 	[ -n "$server_host" ] && [ -n "$port" ] && {
 		check_host $server_host
 		[ $? != 0 ] && {
-			echolog "${PROTO}节点：[$remarks]${server_host} 是非法的服务器地址，无法启动！"
+			if [ $(log_lang) -eq 1 ]; then
+				echolog "${PROTO}节点：[$remarks]${server_host} 是非法的服务器地址，无法启动！"
+			else
+				echolog "${PROTO} Node：[$remarks]${server_host} server address invalid，cannot start!"
+			fi
 			return 1
 		}
-		[ "$bind" != "127.0.0.1" ] && echolog "${PROTO}节点：[$remarks]${server_host}:${port}，监听端口：$local_port"
+		[ "$bind" != "127.0.0.1" ] && {
+			if [ $(log_lang) -eq 1 ]; then
+				echolog "${PROTO}节点：[$remarks]${server_host}:${port}，监听端口：$local_port"
+			else
+				echolog "${PROTO} Node：[$remarks]${server_host}:${port}，listening port：$local_port"
+			fi
+		}
 	}
 	eval ${PROTO}_NODE_PORT=$port
 
@@ -581,12 +631,20 @@ run_redir() {
 			ln_run "$(first_type ${type})" "${type}" $log_file -c "$config_file"
 		;;
 		naiveproxy)
-			echolog "Naiveproxy不支持UDP转发！"
+			if [ $(log_lang) -eq 1 ]; then
+				echolog "Naiveproxy不支持UDP转发！"
+			else
+				echolog "Naiveproxy does not support UDP redirect!"
+			fi
 		;;
 		brook)
 			local protocol=$(config_n_get $node protocol client)
-			if [ "$protocol" == "wsclient" ]; then
-				echolog "Brook的WebSocket不支持UDP转发！"
+			if [ "$protocol" = "wsclient" ]; then
+				if [ $(log_lang) -eq 1 ]; then
+					echolog "Brook的WebSocket不支持UDP转发！"
+				else
+					echolog "Brook's WebSocket doese not support UDP redirect!"
+				fi
 			else
 				ln_run "$(first_type $(config_t_get global_app brook_file) brook)" "brook_UDP" $log_file tproxy -l ":$local_port" -s "$server_host:$port" -p "$(config_n_get $node password)" --doNotRunScripts
 			fi
@@ -611,11 +669,19 @@ run_redir() {
 	;;
 	TCP)
 		if [ $PROXY_IPV6 == "1" ]; then
-			echolog "开启实验性IPv6透明代理(TProxy)，请确认您的节点及类型支持IPv6！"
+			if [ $(log_lang) -eq 1 ]; then
+				echolog "开启实验性IPv6透明代理(TProxy)，请确认您的节点及类型支持IPv6！"
+			else
+				echolog "Enable experimental IPv6 TProxy，please ensure your node support IPv6！"
+			fi
 			if [ $type != "v2ray" ]; then
 				PROXY_IPV6_UDP=1
 			else
-				echolog "节点类型：$type暂未支持IPv6 UDP代理！"
+				if [ $(log_lang) -eq 1 ]; then
+					echolog "节点类型：$type暂未支持IPv6 UDP代理！"
+				else
+					echolog "Node type：$type currently does not support IPv6 UDP redirect！"
+				fi
 			fi
 		fi
 
@@ -679,17 +745,29 @@ run_redir() {
 				case "$v2ray_dns_mode" in
 					tcp)
 						_v2ray_args="${_v2ray_args} remote_dns_tcp_server=${REMOTE_DNS}"
-						echolog "  - 域名解析 DNS Over TCP..."
+						if [ $(log_lang) -eq 1 ]; then
+							echolog "  - 域名解析 DNS Over TCP..."
+						else
+							echolog "  - Host resolve use DNS Over TCP..."
+						fi
 					;;
 					doh)
 						remote_dns_doh=$(config_t_get global remote_dns_doh "https://1.1.1.1/dns-query")
 						_v2ray_args="${_v2ray_args} remote_dns_doh=${remote_dns_doh}"
-						echolog "  - 域名解析 DNS Over HTTPS..."
+						if [ $(log_lang) -eq 1 ]; then
+							echolog "  - 域名解析 DNS Over HTTPS..."
+						else
+							echolog "  - Host resolve use DNS Over HTTPS..."
+						fi
 					;;
 					fakedns)
 						fakedns=1
 						CHINADNS_NG=0
-						echolog "  - 域名解析 Fake DNS..."
+						if [ $(log_lang) -eq 1 ]; then
+							echolog "  - 域名解析 Fake DNS..."
+						else
+							echolog "  - Host resolve Fake DNS..."
+						fi
 					;;
 				esac
 			}
@@ -927,7 +1005,11 @@ start_redir() {
 		}
 	else
 		[ "${proto}" = "UDP" ] && [ "$TCP_UDP" = "1" ] && return
-		echolog "${proto}节点没有选择或为空，不代理${proto}。"
+		if [ $(log_lang) -eq 1 ]; then
+			echolog "${proto}节点没有选择或为空，不代理${proto}。"
+		else
+			echolog "${proto} Node is empty or unselected，${proto} direct connection."
+		fi
 	fi
 }
 
@@ -935,7 +1017,11 @@ start_socks() {
 	[ "$SOCKS_ENABLED" = "1" ] && {
 		local ids=$(uci show $CONFIG | grep "=socks" | awk -F '.' '{print $2}' | awk -F '=' '{print $1}')
 		[ -n "$ids" ] && {
-			echolog "分析 Socks 服务的节点配置..."
+			if [ $(log_lang) -eq 1 ]; then
+				echolog "分析 Socks 服务的节点配置..."
+			else
+				echolog "Analysing Socks service's node config..."
+			fi
 			for id in $ids; do
 				local enabled=$(config_n_get $id enabled 0)
 				[ "$enabled" == "0" ] && continue
@@ -968,7 +1054,11 @@ clean_log() {
 	logsnum=$(cat $LOG_FILE 2>/dev/null | wc -l)
 	[ "$logsnum" -gt 1000 ] && {
 		echo "" > $LOG_FILE
-		echolog "日志文件过长，清空处理！"
+		if [ $(log_lang) -eq 1 ]; then
+			echolog "日志文件过长，清空处理！"
+		else
+			echolog "Log file oversize, delete it!"
+		fi
 	}
 }
 
@@ -993,15 +1083,27 @@ start_crontab() {
 		time_restart=$(config_t_get global_delay time_restart)
 		[ -z "$time_off" -o "$time_off" != "nil" ] && {
 			echo "0 $time_off * * * /etc/init.d/$CONFIG stop" >>/etc/crontabs/root
-			echolog "配置定时任务：每天 $time_off 点关闭服务。"
+			if [ $(log_lang) -eq 1 ]; then
+				echolog "配置定时任务：每天 $time_off 点关闭服务。"
+			else
+				echolog "Config scheduled task: Shutdown service daily at $time_off ."
+			fi
 		}
 		[ -z "$time_on" -o "$time_on" != "nil" ] && {
 			echo "0 $time_on * * * /etc/init.d/$CONFIG start" >>/etc/crontabs/root
-			echolog "配置定时任务：每天 $time_on 点开启服务。"
+			if [ $(log_lang) -eq 1 ]; then
+				echolog "配置定时任务：每天 $time_on 点开启服务。"
+			else
+				echolog "Config scheduled task: Start service daily at $time_on ."
+			fi
 		}
 		[ -z "$time_restart" -o "$time_restart" != "nil" ] && {
 			echo "0 $time_restart * * * /etc/init.d/$CONFIG restart" >>/etc/crontabs/root
-			echolog "配置定时任务：每天 $time_restart 点重启服务。"
+			if [ $(log_lang) -eq 1 ]; then
+				echolog "配置定时任务：每天 $time_restart 点重启服务。"
+			else
+				echolog "Config scheduled task: Restart service daily at $time_restart ."
+			fi
 		}
 	fi
 
@@ -1012,7 +1114,11 @@ start_crontab() {
 		local t="0 $dayupdate * * $weekupdate"
 		[ "$weekupdate" = "7" ] && t="0 $dayupdate * * *"
 		echo "$t lua $APP_PATH/rule_update.lua log > /dev/null 2>&1 &" >>/etc/crontabs/root
-		echolog "配置定时任务：自动更新规则。"
+		if [ $(log_lang) -eq 1 ]; then
+			echolog "配置定时任务：自动更新规则。"
+		else
+			echolog "Config scheduled task: Auto update rules."
+		fi
 	fi
 	
 	TMP_SUB_PATH=$TMP_PATH/sub_crontabs
@@ -1024,7 +1130,11 @@ start_crontab() {
 			week_update=$(config_n_get $item week_update)
 			time_update=$(config_n_get $item time_update)
 			echo "$cfgid" >> $TMP_SUB_PATH/${week_update}_${time_update}
-			echolog "配置定时任务：自动更新【$remark】订阅。"
+			if [ $(log_lang) -eq 1 ]; then
+				echolog "配置定时任务：自动更新【$remark】订阅。"
+			else
+				echolog "Config scheduled task: Auto update【$remark】subscription."
+			fi
 		fi
 	done
 	
@@ -1047,7 +1157,11 @@ start_crontab() {
 		AUTO_SWITCH_ENABLE=$(config_t_get auto_switch enable 0)
 		[ "$AUTO_SWITCH_ENABLE" = "1" ] && $APP_PATH/test.sh > /dev/null 2>&1 &
 	else
-		echolog "运行于非代理模式，仅允许服务启停的定时任务。"
+		if [ $(log_lang) -eq 1 ]; then
+			echolog "运行于非代理模式，仅允许服务启停的定时任务。"
+		else
+			echolog "Runing at none proxy mode, only allow scheduled stop start."
+		fi
 	fi
 
 	/etc/init.d/cron restart
@@ -1061,8 +1175,13 @@ stop_crontab() {
 
 start_dns() {
 	TUN_DNS="127.0.0.1#${dns_listen_port}"
-
-	echolog "过滤服务配置：准备接管域名解析..."
+	
+	if [ $(log_lang) -eq 1 ]; then
+		echolog "过滤服务配置：准备接管域名解析..."
+	else
+		echolog "Filter service config：Ready for hijacking hostname reslove..."
+	fi
+	
 	local items=$(uci show ${CONFIG} | grep "=acl_rule" | cut -d '.' -sf 2 | cut -d '=' -sf 1)
 	[ -n "$items" ] && {
 		for item in $items; do
@@ -1087,7 +1206,11 @@ start_dns() {
 		local dns2socks_socks_server=$(echo $(config_t_get global socks_server 127.0.0.1:1080) | sed "s/#/:/g")
 		local dns2socks_forward=$(get_first_dns REMOTE_DNS 53 | sed 's/#/:/g')
 		run_dns2socks socks=$dns2socks_socks_server listen_address=127.0.0.1 listen_port=${dns_listen_port} dns=$dns2socks_forward cache=$DNS_CACHE
-		echolog "  - 域名解析：dns2socks(127.0.0.1:${dns_listen_port})，${dns2socks_socks_server} -> ${dns2socks_forward}"
+		if [ $(log_lang) -eq 1 ]; then
+			echolog "  - 域名解析：dns2socks(127.0.0.1:${dns_listen_port})，${dns2socks_socks_server} -> ${dns2socks_forward}"
+		else
+			echolog "  - Hostname reslove：dns2socks(127.0.0.1:${dns_listen_port})，${dns2socks_socks_server} -> ${dns2socks_forward}"
+		fi
 	;;
 	v2ray|\
 	xray)
@@ -1107,7 +1230,11 @@ start_dns() {
 			case "$v2ray_dns_mode" in
 				tcp)
 					_v2ray_args="${_v2ray_args} remote_dns_tcp_server=${REMOTE_DNS}"
-					echolog "  - 域名解析 DNS Over TCP..."
+					if [ $(log_lang) -eq 1 ]; then
+						echolog "  - 域名解析 DNS Over TCP..."
+					else
+						echolog "  - Reslove hostname using DNS Over TCP..."
+					fi
 				;;
 				doh)
 					remote_dns_doh=$(config_t_get global remote_dns_doh "https://1.1.1.1/dns-query")
@@ -1123,7 +1250,11 @@ start_dns() {
 					[ "${_is_ip}" = "true" ] && _doh_bootstrap=${_doh_host}
 					[ -n "${_doh_bootstrap}" ] && REMOTE_DNS=${_doh_bootstrap}:${_doh_port}
 					unset _doh_url _doh_host_port _doh_host _is_ip _doh_port _doh_bootstrap
-					echolog "  - 域名解析 DNS Over HTTPS..."
+					if [ $(log_lang) -eq 1 ]; then
+						echolog "  - 域名解析: DNS Over HTTPS..."
+					else
+						echolog "  - Hostname reslove: use DNS Over HTTPS..."
+					fi
 				;;
 			esac
 			run_v2ray ${_v2ray_args}
@@ -1133,17 +1264,37 @@ start_dns() {
 		use_tcp_node_resolve_dns=1
 		gen_pdnsd_config "${dns_listen_port}" "${REMOTE_DNS}" "${DNS_CACHE}"
 		ln_run "$(first_type pdnsd)" pdnsd "/dev/null" --daemon -c "${TMP_PATH}/pdnsd/pdnsd.conf" -d
-		echolog "  - 域名解析：pdnsd + 使用(TCP节点)解析域名..."
+		if [ $(log_lang) -eq 1 ]; then
+			echolog "  - 域名解析：pdnsd + 使用(TCP节点)解析域名..."
+		else
+			echolog "  - Hostname reslove：use pdnsd + use (TCP Node) to reslove..."
+		fi
 	;;
 	udp)
 		use_udp_node_resolve_dns=1
 		TUN_DNS="$(echo ${REMOTE_DNS} | sed 's/#/:/g' | sed -E 's/\:([^:]+)$/#\1/g')"
-		echolog "  - 域名解析：使用UDP协议请求DNS（$TUN_DNS）..."
+		if [ $(log_lang) -eq 1 ]; then
+			echolog "  - 域名解析：使用UDP协议请求DNS（$TUN_DNS）..."
+		else
+			echolog "  - Hostname reslove：use UDP proto to request DNS（$TUN_DNS）..."
+		fi
 	;;
 	esac
 
-	[ "${use_tcp_node_resolve_dns}" = "1" ] && echolog "  * 请确认上游 DNS 支持 TCP 查询，如非直连地址，确保 TCP 代理打开，并且已经正确转发！"
-	[ "${use_udp_node_resolve_dns}" = "1" ] && echolog "  * 要求代理 DNS 请求，如上游 DNS 非直连地址，确保 UDP 代理打开，并且已经正确转发！"
+	[ "${use_tcp_node_resolve_dns}" = "1" ] && {
+		if [ $(log_lang) -eq 1 ]; then
+			echolog "  * 请确认上游 DNS 支持 TCP 查询，如非直连地址，确保 TCP 代理打开，并且已经正确转发！"
+		else
+			echolog "  * Please ensure upstream DNS support TCP request，check TCP proxy is enabled and functional!"
+		fi
+	}
+	[ "${use_udp_node_resolve_dns}" = "1" ] && {
+		if [ $(log_lang) -eq 1 ]; then
+			echolog "  * 要求代理 DNS 请求，如上游 DNS 非直连地址，确保 UDP 代理打开，并且已经正确转发！"
+		else
+			echolog "  * Request proxy DNS request，check UDP proxy is enabled and functional!"
+		fi
+	}
 	
 	case "$DNS_SHUNT" in
 	smartdns)
@@ -1151,7 +1302,11 @@ start_dns() {
 		CHINADNS_NG=0
 		source $APP_PATH/helper_smartdns.sh add FLAG="default" DNS_MODE=$DNS_MODE SMARTDNS_CONF=/tmp/etc/smartdns/$CONFIG.conf REMOTE_FAKEDNS=$fakedns DEFAULT_DNS=$DEFAULT_DNS LOCAL_GROUP=$group_domestic TUN_DNS=$TUN_DNS TCP_NODE=$TCP_NODE PROXY_MODE=${TCP_PROXY_MODE}${LOCALHOST_TCP_PROXY_MODE}${ACL_TCP_PROXY_MODE} NO_PROXY_IPV6=${filter_proxy_ipv6}
 		source $APP_PATH/helper_smartdns.sh restart
-		echolog "  - 域名解析：使用SmartDNS，请确保配置正常。"
+		if [ $(log_lang) -eq 1 ]; then
+			echolog "  - 域名解析：使用SmartDNS，请确保配置正常。"
+		else
+			echolog "  - Hostname reslove：use SmartDNS，please ensure config is valid!"
+		fi
 	;;
 	esac
 
@@ -1160,7 +1315,11 @@ start_dns() {
 		china_ng_listen="127.0.0.1#${china_ng_listen_port}"
 		china_ng_chn=$(echo -n $(echo "${LOCAL_DNS}" | sed "s/,/\n/g" | head -n2) | tr " " ",")
 		china_ng_gfw="${TUN_DNS}"
-		echolog "  | - (chinadns-ng) 最高支持4级域名过滤..."
+		if [ $(log_lang) -eq 1 ]; then
+			echolog "  | - (chinadns-ng) 最高支持4级域名过滤..."
+		else
+			echolog "  | - (chinadns-ng) support upto 4 level of hostname filtering..."
+		fi
 
 		local gfwlist_param="${TMP_PATH}/chinadns_gfwlist"
 		[ -s "${RULES_PATH}/gfwlist" ] && cp -a "${RULES_PATH}/gfwlist" "${gfwlist_param}"
@@ -1169,17 +1328,29 @@ start_dns() {
 
 		[ -s "${RULES_PATH}/proxy_host" ] && {
 			cat "${RULES_PATH}/proxy_host" | tr -s '\n' | grep -v "^#" | sort -u >> "${gfwlist_param}"
-			echolog "  | - [$?](chinadns-ng) 代理域名表合并到防火墙域名表"
+			if [ $(log_lang) -eq 1 ]; then
+				echolog "  | - [$?](chinadns-ng) 代理域名表合并到防火墙域名表"
+			else
+				echolog "  | - [$?](chinadns-ng) combine hostname list to gfwlist"
+			fi
 		}
 		[ -s "${RULES_PATH}/direct_host" ] && {
 			cat "${RULES_PATH}/direct_host" | tr -s '\n' | grep -v "^#" | sort -u >> "${chnlist_param}"
-			echolog "  | - [$?](chinadns-ng) 域名白名单合并到中国域名表"
+			if [ $(log_lang) -eq 1 ]; then
+				echolog "  | - [$?](chinadns-ng) 域名白名单合并到中国域名表"
+			else
+				echolog "  | - [$?](chinadns-ng) combine hostname whitelist to chinalist"
+			fi
 		}
 		chnlist_param=${chnlist_param:+-m "${chnlist_param}" -M}
 		local log_path="${TMP_PATH}/chinadns-ng.log"
 		log_path="/dev/null"
 		ln_run "$(first_type chinadns-ng)" chinadns-ng "$log_path" -v -b 0.0.0.0 -l "${china_ng_listen_port}" ${china_ng_chn:+-c "${china_ng_chn}"} ${chnlist_param} ${china_ng_gfw:+-t "${china_ng_gfw}"} ${gfwlist_param:+-g "${gfwlist_param}"} -f
-		echolog "  + 过滤服务：ChinaDNS-NG(:${china_ng_listen_port})：国内DNS：${china_ng_chn}，可信DNS：${china_ng_gfw}"
+		if [ $(log_lang) -eq 1 ]; then
+			echolog "  + 过滤服务：ChinaDNS-NG(:${china_ng_listen_port})：国内DNS：${china_ng_chn}，可信DNS：${china_ng_gfw}"
+		else
+			echolog "  + Filter service：ChinaDNS-NG(:${china_ng_listen_port})：Mainland DNS：${china_ng_chn}，trusted DNS：${china_ng_gfw}"
+		fi
 	}
 	
 	[ "$DNS_SHUNT" = "dnsmasq" ] && {
@@ -1233,7 +1404,14 @@ gen_pdnsd_config() {
 	echolog "  + [$?]Pdnsd (127.0.0.1:${listen_port})..."
 
 	append_pdnsd_updns() {
-		[ -z "${2}" ] && echolog "  | - 略过错误 : ${1}" && return 0
+		[ -z "${2}" ] && {
+			if [ $(log_lang) -eq 1 ]; then
+				echolog "  | - 略过错误 : ${1}"
+			else
+				echolog "  | - Ignore error : ${1}"
+			fi
+			return 0
+		}
 		cat >> $pdnsd_dir/pdnsd.conf <<-EOF
 			server {
 				label = "node-${2}_${3}";
@@ -1248,7 +1426,11 @@ gen_pdnsd_config() {
 				caching = $_cache;${reject_ipv6_dns}
 			}
 		EOF
-		echolog "  | - [$?]上游DNS：${2}:${3}"
+		if [ $(log_lang) -eq 1 ]; then
+			echolog "  | - [$?]上游DNS：${2}:${3}"
+		else
+			echolog "  | - [$?]upstream DNS：${2}:${3}"
+		fi
 	}
 	hosts_foreach up_dns append_pdnsd_updns 53
 }
@@ -1256,7 +1438,11 @@ gen_pdnsd_config() {
 add_ip2route() {
 	local ip=$(get_host_ip "ipv4" $1)
 	[ -z "$ip" ] && {
-		echolog "  - 无法解析[${1}]，路由表添加失败！"
+		if [ $(log_lang) -eq 1 ]; then
+			echolog "  - 无法解析[${1}]，路由表添加失败！"
+		else
+			echolog "  - Cannot reslove[${1}]，routing table addition fail!"
+		fi
 		return 1
 	}
 	local remarks="${1}"
@@ -1271,9 +1457,17 @@ add_ip2route() {
 	if [ -n "${gateway}" ]; then
 		route add -host ${ip} gw ${gateway} dev ${device} >/dev/null 2>&1
 		echo "$ip" >> $TMP_ROUTE_PATH/${device}
-		echolog "  - [${remarks}]添加到接口[${device}]路由表成功！"
+		if [ $(log_lang) -eq 1 ]; then
+			echolog "  - [${remarks}]添加到接口[${device}]路由表成功！"
+		else
+			echolog "  - [${remarks}] add to interface [${device}] routing table success!"
+		fi
 	else
-		echolog "  - [${remarks}]添加到接口[${device}]路由表失功！原因是找不到[${device}]网关。"
+		if [ $(log_lang) -eq 1 ]; then
+			echolog "  - [${remarks}]添加到接口[${device}]路由表失功！原因是找不到[${device}]网关。"
+		else
+			echolog "  - [${remarks}]add to interface [${device}] routing table fail! [${device}] not found."
+		fi
 	fi
 }
 
@@ -1291,7 +1485,11 @@ start_haproxy() {
 	local haproxy_path haproxy_file item items lport sort_items
 
 	[ "$(config_t_get global_haproxy balancing_enable 0)" != "1" ] && return
-	echolog "HAPROXY 负载均衡..."
+	if [ $(log_lang) -eq 1 ]; then
+		echolog "HAPROXY 负载均衡..."
+	else
+		echolog "HAPROXY load balancing..."
+	fi
 
 	haproxy_path=${TMP_PATH}/haproxy
 	mkdir -p "${haproxy_path}"
@@ -1327,7 +1525,13 @@ start_haproxy() {
 	items=$(uci show ${CONFIG} | grep "=haproxy_config" | cut -d '.' -sf 2 | cut -d '=' -sf 1)
 	for item in $items; do
 		lport=$(config_n_get ${item} haproxy_port 0)
-		[ "${lport}" = "0" ] && echolog "  - 丢弃1个明显无效的节点" && continue
+		[ "${lport}" = "0" ] && {
+			if [ $(log_lang) -eq 1 ]; then
+				echolog "  - 丢弃1个明显无效的节点" && continue
+			else
+				echolog "  - remove 1 invalid node" && continue
+			fi
+		}
 		sort_items="${sort_items}${IFS}${lport} ${item}"
 	done
 
@@ -1343,14 +1547,24 @@ start_haproxy() {
 		[ "$enabled" = "1" ] || continue
 		get_ip_port_from "$lbss" bip bport 1
 
-		[ -z "$haproxy_port" ] || [ -z "$bip" ] && echolog "  - 丢弃1个明显无效的节点" && continue
+		[ -z "$haproxy_port" ] || [ -z "$bip" ] && {
+			if [ $(log_lang) -eq 1 ]; then
+				echolog "  - 丢弃1个明显无效的节点" && continue
+			else
+				echolog "  - remove 1 invalid node" && continue
+			fi
+		}
 		[ "$backup" = "1" ] && bbackup="backup"
 		remark=$(echo $bip | sed "s/\[//g" | sed "s/\]//g")
 
 		[ "$lport" = "${haproxy_port}" ] || {
 			hasvalid="1"
 			lport=${haproxy_port}
-			echolog "  + 入口 0.0.0.0:${lport}..."
+			if [ $(log_lang) -eq 1 ]; then
+				echolog "  + 入口 0.0.0.0:${lport}..."
+			else
+				echolog "  + Inbound 0.0.0.0:${lport}..."
+			fi
 			cat <<-EOF >> "${haproxy_file}"
 				listen $lport
 				    mode tcp
@@ -1367,7 +1581,11 @@ start_haproxy() {
 		fi
 
 		haproxy_items="${haproxy_items}${IFS}${bip}:${bport}"
-		echolog "  | - 出口节点：${bip}:${bport}，权重：${lbweight}"
+		if [ $(log_lang) -eq 1 ]; then
+			echolog "  | - 出口节点：${bip}:${bport}，权重：${lbweight}"
+		else
+			echolog "  | - Outbond Node：${bip}:${bport}，weight：${lbweight}"
+		fi
 	done
 
 	# 控制台配置
@@ -1387,9 +1605,20 @@ start_haproxy() {
 		    $auth
 	EOF
 
-	[ "${hasvalid}" != "1" ] && echolog "  - 没有发现任何有效节点信息，不启动。" && return 0
+	[ "${hasvalid}" != "1" ] && {
+		if [ $(log_lang) -eq 1 ]; then
+			echolog "  - 没有发现任何有效节点信息，不启动。"
+		else
+			echolog "  - No valid node, startup halt."
+		fi
+		return 0
+	}
 	ln_run "$(first_type haproxy)" haproxy "/dev/null" -f "${haproxy_file}"
-	echolog "  * 控制台端口：${console_port}/，${auth:-公开}"
+	if [ $(log_lang) -eq 1 ]; then
+		echolog "  * 控制台端口：${console_port}/，${auth:-公开}"
+	else
+		echolog "  * Controller port：${console_port}/，${auth:-公开}"
+	fi
 }
 
 kill_all() {
@@ -1400,7 +1629,11 @@ boot() {
 	[ "$ENABLED" == 1 ] && {
 		local delay=$(config_t_get global_delay start_delay 1)
 		if [ "$delay" -gt 0 ]; then
-			echolog "执行启动延时 $delay 秒后再启动!"
+			if [ $(log_lang) -eq 1 ]; then
+				echolog "执行启动延时 $delay 秒后再启动!"
+			else
+				echolog "Startup delay for $delay !"
+			fi
 			sleep $delay && start >/dev/null 2>&1 &
 		else
 			start
@@ -1416,7 +1649,11 @@ start() {
 
 	[ "$NO_PROXY" == 1 ] || {
 		if [ -z "$(command -v iptables-legacy || command -v iptables)" ] || [ -z "$(command -v ipset)" ]; then
-			echolog "系统未安装iptables或ipset，无法透明代理！"
+			if [ $(log_lang) -eq 1 ]; then
+				echolog "系统未安装iptables或ipset，无法透明代理！"
+			else
+				echolog "missing iptables or ipset, cannot use TProxy!"
+			fi
 		else
 			start_redir TCP
 			start_redir UDP
@@ -1426,7 +1663,11 @@ start() {
 		fi
 	}
 	start_crontab
-	echolog "运行完成！\n"
+	if [ $(log_lang) -eq 1 ]; then
+		echolog "运行完成！\n"
+	else
+		echolog "Execution complete！\n"
+	fi
 }
 
 stop() {
@@ -1444,7 +1685,11 @@ stop() {
 	source $APP_PATH/helper_dnsmasq.sh restart no_log=1
 	rm -rf ${TMP_PATH}
 	rm -rf /tmp/lock/${CONFIG}_script.lock
-	echolog "清空并关闭相关程序和缓存完成。"
+	if [ $(log_lang) -eq 1 ]; then
+		echolog "清空并关闭相关程序和缓存完成。"
+	else
+		echolog "Services stopped and cache cleared."
+	fi
 	/etc/init.d/sysctl restart
 	exit 0
 }

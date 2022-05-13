@@ -1,5 +1,14 @@
 #!/bin/sh
 
+sys_lang="$(uci -q get luci.main.lang)"
+
+log_lang() {
+	case "$sys_lang" in
+		*zh*) echo 1 ;;
+		*)    echo 0 ;;
+	esac	
+}
+
 stretch() {
 	#zhenduiluanshezhiDNSderen
 	local dnsmasq_server=$(uci -q get dhcp.@dnsmasq[0].server)
@@ -50,7 +59,11 @@ logic_restart() {
 	else
 		/etc/init.d/dnsmasq restart >/dev/null 2>&1
 	fi
-	echolog "重启 dnsmasq 服务"
+	if [ $(log_lang) -eq 1 ]; then
+		echolog "重启 dnsmasq 服务"
+	else
+		echolog "Restart dnsmasq"
+	fi
 	LOG_FILE=${_LOG_FILE}
 }
 
@@ -60,7 +73,11 @@ restart() {
 	_LOG_FILE=$LOG_FILE
 	[ -n "$no_log" ] && LOG_FILE="/dev/null"
 	/etc/init.d/dnsmasq restart >/dev/null 2>&1
-	echolog "重启 dnsmasq 服务"
+	if [ $(log_lang) -eq 1 ]; then
+		echolog "重启 dnsmasq 服务"
+	else
+		echolog "Restart dnsmasq"
+	fi
 	LOG_FILE=${_LOG_FILE}
 }
 
