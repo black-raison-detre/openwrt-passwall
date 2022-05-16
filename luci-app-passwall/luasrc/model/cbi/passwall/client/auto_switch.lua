@@ -61,6 +61,21 @@ o:value("0", translate("Switch it"))
 o:value("1", translate("Applying to the default node"))
 o:value("2", translate("Applying to the default preproxy node"))
 
+-- [[ Restore Connection ]]--
+o = s:option(Flag, "auto_restore", translate("Auto restore connection"), translate("If backup nodes fail aswell, take the following action."))
+o.default = 0
+o.rmempty = false
+
+o = s:option(Value, "fail_threshold", translate("Auto switch fail count"), translate("Nums of failed node switch before action."))
+o.datatype = "uinteger"
+o.default = 10
+
+o = s:option(ListValue, "restore_action", translate("Restore action"), translate("Update subscription without proxy or stop/restart passwall service."))
+o.default = "resubscribe"
+o:value("resubscribe", translate("Resubscribe"))
+o:value("restart", translate("Restart Passwall"))
+o:value("quit", translate("Quit Passwall"))
+
 m:append(Template(appname .. "/auto_switch/footer"))
 
 return m

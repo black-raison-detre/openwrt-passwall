@@ -658,6 +658,30 @@ msgstr "通过关键字删除备用节点列表的节点"
 msgid "Please enter the node keyword, pay attention to distinguish between spaces, uppercase and lowercase."
 msgstr "请输入节点关键字，注意区分空格、大写和小写。"
 
+msgid "Auto restore connection"
+msgstr "自动修复连接"
+
+msgid "Auto switch fail count"
+msgstr "自动切换失败次数"
+
+msgid "Nums of failed node switch before action."
+msgstr "恢复动作之前进行多少次切换尝试"
+
+msgid "Restore action"
+msgstr "恢复动作"
+
+msgid "Update subscription without proxy or stop/restart passwall service."
+msgstr "尝试不用代理更新订阅或者重启/退出passwall"
+
+msgid "Resubscribe"
+msgstr "重新订阅"
+
+msgid "Quit Passwall"
+msgstr "退出Passwall"
+
+msgid "Restart Passwall"
+msgstr "重启Passwall"
+
 msgid "Configure this node with 127.0.0.1: this port"
 msgstr "使用127.0.0.1和此端口配置节点"
 

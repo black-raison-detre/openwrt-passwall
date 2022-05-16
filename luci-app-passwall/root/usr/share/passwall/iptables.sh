@@ -116,7 +116,7 @@ insert_rule_after() {
 
 RULE_LAST_INDEX() {
 	[ $# -ge 3 ] || {
-		if [ $(log_lang) -eq 1 ]; then
+		if [ "$(log_lang)" -eq 1 ]; then
 			echolog "索引列举方式不正确（iptables），终止执行！"
 		else
 			echolog "Iptables list index error, execution stop!"
@@ -221,42 +221,42 @@ get_redirect_ip6t() {
 get_action_chain_name() {
 	case "$1" in
 	disable)
-		if [ $(log_lang) -eq 1 ]; then
+		if [ "$(log_lang)" -eq 1 ]; then
 			echo "不代理"
 		else
 			echo "No proxy"
 		fi
 		;;
 	global)
-		if [ $(log_lang) -eq 1 ]; then
+		if [ "$(log_lang)" -eq 1 ]; then
 			echo "全局代理"
 		else
 			echo "Global proxy"
 		fi
 		;;
 	gfwlist)
-		if [ $(log_lang) -eq 1 ]; then
+		if [ "$(log_lang)" -eq 1 ]; then
 			echo "防火墙列表"
 		else
 			echo "Proxy GFW list"
 		fi
 		;;
 	chnroute)
-		if [ $(log_lang) -eq 1 ]; then
+		if [ "$(log_lang)" -eq 1 ]; then
 			echo "中国列表以外"
 		else
 			echo "Proxy not china list"
 		fi
 		;;
 	returnhome)
-		if [ $(log_lang) -eq 1 ]; then
+		if [ "$(log_lang)" -eq 1 ]; then
 			echo "中国列表"
 		else
 			echo "Proxy china list"
 		fi
 		;;
 	direct/proxy)
-		if [ $(log_lang) -eq 1 ]; then
+		if [ "$(log_lang)" -eq 1 ]; then
 			echo "仅使用直连/代理列表"
 		else
 			echo "Use direct/proxy list"
@@ -305,7 +305,7 @@ load_acl() {
 		redir_port=11200
 		dns_port=11300
 		dnsmasq_port=11400
-		if [ $(log_lang) -eq 1 ]; then
+		if [ "$(log_lang)" -eq 1 ]; then
 			echolog "访问控制："
 		else
 			echolog "Access control: "
@@ -573,7 +573,7 @@ load_acl() {
 							$ip6t_m -A PSW $(comment "$remarks") -p tcp ${_ipt_source} $(REDIRECT $tcp_port TPROXY) 2>/dev/null
 						}
 					else
-						if [ $(log_lang) -eq 1 ]; then
+						if [ "$(log_lang)" -eq 1 ]; then
 							msg2="${msg}不代理TCP"
 						else
 							msg2="${msd} do not proxy TCP"
@@ -622,7 +622,7 @@ load_acl() {
 							$ip6t_m -A PSW $(comment "$remarks") -p udp ${_ipt_source} $(REDIRECT $udp_port TPROXY) 2>/dev/null
 						}
 					else
-						if [ $(log_lang) -eq 1 ]; then
+						if [ "$(log_lang)" -eq 1 ]; then
 							msg2="${msg}不代理UDP"
 						else
 							msg2="${msg} do not proxy UDP"
@@ -663,7 +663,7 @@ load_acl() {
 			$ipt_tmp -A PSW $(comment "默认") -p tcp -m multiport --dport $TCP_NO_REDIR_PORTS -j RETURN
 		}
 		[ "$TCP_NODE" != "nil" ] && {
-			if [ $(log_lang) -eq 1 ]; then
+			if [ "$(log_lang)" -eq 1 ]; then
 				msg="TCP默认代理：使用TCP节点[$(config_n_get $TCP_NODE remarks)] [$(get_action_chain_name $TCP_PROXY_MODE)]"
 			else
 				msg="TCP default proxy:use TCP node [$(config_n_get $TCP_NODE remarks)] [$(get_action_chain_name $TCP_PROXY_MODE)]"
@@ -737,7 +737,7 @@ load_acl() {
 
 		[ "$UDP_NODE" != "nil" -o "$TCP_UDP" = "1" ] && {
 			[ "$TCP_UDP" = "1" ] && [ "$UDP_NODE" = "nil" ] && UDP_NODE=$TCP_NODE
-			if [ $(log_lang) -eq 1 ]; then
+			if [ "$(log_lang)" -eq 1 ]; then
 				msg="UDP默认代理：使用UDP节点[$(config_n_get $UDP_NODE remarks)] [$(get_action_chain_name $UDP_PROXY_MODE)](TPROXY:${UDP_REDIR_PORT})代理"
 			else
 				msg="UDP default proxy：use UDP node [$(config_n_get $UDP_NODE remarks)] [$(get_action_chain_name $UDP_PROXY_MODE)](TPROXY:${UDP_REDIR_PORT})代理"
@@ -772,7 +772,7 @@ filter_haproxy() {
 		local ip=$(get_host_ip ipv4 $(echo $item | awk -F ":" '{print $1}') 1)
 		ipset -q add $IPSET_VPSIPLIST $ip
 	done
-	if [ $(log_lang) -eq 1 ]; then
+	if [ "$(log_lang)" -eq 1 ]; then
 		echolog "加入负载均衡的节点到ipset[$IPSET_VPSIPLIST]直连完成"
 	else
 		echolog "Add load balancing node to ipset [$IPSET_VPSIPLIST] direct connection complete"
@@ -782,7 +782,7 @@ filter_haproxy() {
 filter_vpsip() {
 	uci show $CONFIG | grep ".address=" | cut -d "'" -f 2 | grep -E "([0-9]{1,3}[\.]){3}[0-9]{1,3}" | sed -e "/^$/d" | sed -e "s/^/add $IPSET_VPSIPLIST &/g" | awk '{print $0} END{print "COMMIT"}' | ipset -! -R
 	uci show $CONFIG | grep ".address=" | cut -d "'" -f 2 | grep -E "([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4}" | sed -e "/^$/d" | sed -e "s/^/add $IPSET_VPSIPLIST6 &/g" | awk '{print $0} END{print "COMMIT"}' | ipset -! -R
-	if [ $(log_lang) -eq 1 ]; then
+	if [ "$(log_lang)" -eq 1 ]; then
 		echolog "加入所有节点到ipset[$IPSET_VPSIPLIST]直连完成"
 	else
 		echolog "Add all nodes to ipset[$IPSET_VPSIPLIST], direct connection complete"
@@ -815,7 +815,7 @@ filter_node() {
 				msg="REDIRECT"
 			fi
 		else
-			if [ $(log_lang) -eq 1 ]; then
+			if [ "$(log_lang)" -eq 1 ]; then
 				echolog "  - 节点配置不正常，略过"
 			else
 				echolog "  - Node config error，ignore it"
@@ -899,7 +899,7 @@ filter_node() {
 
 dns_hijack() {
 	$ipt_n -I PSW -p udp --dport 53 -j REDIRECT --to-ports 53
-	if [ $(log_lang) -eq 1 ]; then
+	if [ "$(log_lang)" -eq 1 ]; then
 		echolog "强制转发本机DNS端口 UDP/53 的请求[$?]"
 	else
 		echolog "Force redirect local DNS ports UDP/53 [$?]"
@@ -907,7 +907,7 @@ dns_hijack() {
 }
 
 add_firewall_rule() {
-	if [ $(log_lang) -eq 1 ]; then
+	if [ "$(log_lang)" -eq 1 ]; then
 		echolog "开始加载防火墙规则..."
 	else
 		echolog "Start loading firewall rules..."
@@ -1111,7 +1111,7 @@ add_firewall_rule() {
 
 	# 加载路由器自身代理 TCP
 	if [ "$TCP_NODE" != "nil" ]; then
-		if [ $(log_lang) -eq 1 ]; then
+		if [ "$(log_lang)" -eq 1 ]; then
 			echolog "加载路由器自身 TCP 代理..."
 		else
 			echolog "Load router's TCP proxy"
@@ -1134,7 +1134,7 @@ add_firewall_rule() {
 
 		local ipt_tmp=$ipt_n
 		[ -n "${is_tproxy}" ] && {
-			if [ $(log_lang) -eq 1 ]; then
+			if [ "$(log_lang)" -eq 1 ]; then
 				echolog "  - 启用 TPROXY 模式"
 			else
 				echolog "  - Start TPROXY mode"
@@ -1146,7 +1146,7 @@ add_firewall_rule() {
 			[ -n "${2}" ] || return 0
 			ipset -q test $IPSET_LANIPLIST ${2}
 			[ $? -eq 0 ] && {
-				if [ $(log_lang) -eq 1 ]; then
+				if [ "$(log_lang)" -eq 1 ]; then
 					echolog "  - 上游 DNS 服务器 ${2} 已在直接访问的列表中，不强制向 TCP 代理转发对该服务器 TCP/${3} 端口的访问"
 				else
 					echolog "  - Upstream DNS server ${2} is already in direct access list，access to this server's TCP/${3} port is not going to be redirected"
@@ -1159,7 +1159,7 @@ add_firewall_rule() {
 				$ipt_m -I PSW_OUTPUT -p tcp -d ${2} --dport ${3} -j PSW_RULE
 				$ipt_m -I PSW $(comment "本机") -p tcp -i lo -d ${2} --dport ${3} $(REDIRECT $TCP_REDIR_PORT TPROXY)
 			fi
-			if [ $(log_lang) -eq 1 ]; then
+			if [ "$(log_lang)" -eq 1 ]; then
 				echolog "  - [$?]将上游 DNS 服务器 ${2}:${3} 加入到路由器自身代理的 TCP 转发链"
 			else
 				echolog "  - [$?]Add upstream DNS server ${2}:${3} to router's proxy TCP redirection chain"
@@ -1170,7 +1170,7 @@ add_firewall_rule() {
 		[ "$TCP_NO_REDIR_PORTS" != "disable" ] && {
 			$ipt_tmp -A PSW_OUTPUT -p tcp -m multiport --dport $TCP_NO_REDIR_PORTS -j RETURN
 			$ip6t_m -A PSW_OUTPUT -p tcp -m multiport --dport $TCP_NO_REDIR_PORTS -j RETURN
-			if [ $(log_lang) -eq 1 ]; then
+			if [ "$(log_lang)" -eq 1 ]; then
 				echolog "  - [$?]不代理TCP 端口：$TCP_NO_REDIR_PORTS"
 			else
 				echolog "  - [$?] do not redirect these TCP ports：$TCP_NO_REDIR_PORTS"
@@ -1181,7 +1181,7 @@ add_firewall_rule() {
 			$ipt_m -A PSW_OUTPUT -p tcp $(factor $TCP_PROXY_DROP_PORTS "-m multiport --dport") $(dst $IPSET_SHUNTLIST) -j DROP
 			$ipt_m -A PSW_OUTPUT -p tcp $(factor $TCP_PROXY_DROP_PORTS "-m multiport --dport") $(dst $IPSET_BLACKLIST) -j DROP
 			[ "$LOCALHOST_TCP_PROXY_MODE" != "direct/proxy" ] && $ipt_m -A PSW_OUTPUT -p tcp $(factor $TCP_PROXY_DROP_PORTS "-m multiport --dport") $(get_ipset_ipt $LOCALHOST_TCP_PROXY_MODE) -j DROP
-			if [ $(log_lang) -eq 1 ]; then
+			if [ "$(log_lang)" -eq 1 ]; then
 				echolog "  - [$?]，屏蔽代理TCP 端口：$TCP_PROXY_DROP_PORTS"
 			else
 				echolog "  - [$?]，drop proxy's TCP port：$TCP_PROXY_DROP_PORTS"
@@ -1260,14 +1260,14 @@ add_firewall_rule() {
 		$ipt_m -A PSW_OUTPUT -p udp $(factor $UDP_PROXY_DROP_PORTS "-m multiport --dport") $(dst $IPSET_SHUNTLIST) -j DROP
 		$ipt_m -A PSW_OUTPUT -p udp $(factor $UDP_PROXY_DROP_PORTS "-m multiport --dport") $(dst $IPSET_BLACKLIST) -j DROP
 		[ "$LOCALHOST_UDP_PROXY_MODE" != "direct/proxy" ] && $ipt_m -A PSW_OUTPUT -p udp $(factor $UDP_PROXY_DROP_PORTS "-m multiport --dport") $(get_ipset_ipt $LOCALHOST_UDP_PROXY_MODE) -j DROP
-		if [ $(log_lang) -eq 1 ]; then
+		if [ "$(log_lang)" -eq 1 ]; then
 			echolog "  - [$?]，屏蔽代理UDP 端口：$UDP_PROXY_DROP_PORTS"
 		else
 			echolog "  - [$?], drop these UDP ports：$UDP_PROXY_DROP_PORTS"
 		fi
 	}
 	if [ "$UDP_NODE" != "nil" -o "$TCP_UDP" = "1" ]; then
-		if [ $(log_lang) -eq 1 ]; then
+		if [ "$(log_lang)" -eq 1 ]; then
 			echolog "加载路由器自身 UDP 代理..."
 		else
 			echolog "Load router's UDP redirect proxy"
@@ -1276,7 +1276,7 @@ add_firewall_rule() {
 			[ -n "${2}" ] || return 0
 			ipset -q test $IPSET_LANIPLIST ${2}
 			[ $? == 0 ] && {
-				if [ $(log_lang) -eq 1 ]; then
+				if [ "$(log_lang)" -eq 1 ]; then
 					echolog "  - 上游 DNS 服务器 ${2} 已在直接访问的列表中，不强制向 UDP 代理转发对该服务器 UDP/${3} 端口的访问"
 				else
 					echolog "  - Upstream DNS server ${2} is already in the direct list, access to this server UDP/${3} is not goint to be redirected"
@@ -1285,7 +1285,7 @@ add_firewall_rule() {
 			}
 			$ipt_m -I PSW_OUTPUT -p udp -d ${2} --dport ${3} -j PSW_RULE
 			$ipt_m -I PSW $(comment "本机") -p udp -i lo -d ${2} --dport ${3} $(REDIRECT $UDP_REDIR_PORT TPROXY)
-			if [ $(log_lang) -eq 1 ]; then
+			if [ "$(log_lang)" -eq 1 ]; then
 				echolog "  - [$?]将上游 DNS 服务器 ${2}:${3} 加入到路由器自身代理的 UDP 转发链"
 			else
 				echolog "  - [$?]Add upstream DNS server ${2}:${3} to router's proxy UDP redirect chain"
@@ -1295,7 +1295,7 @@ add_firewall_rule() {
 		[ "$UDP_NO_REDIR_PORTS" != "disable" ] && {
 			$ipt_m -A PSW_OUTPUT -p udp -m multiport --dport $UDP_NO_REDIR_PORTS -j RETURN
 			$ip6t_m -A PSW_OUTPUT -p udp -m multiport --dport $UDP_NO_REDIR_PORTS -j RETURN
-			if [ $(log_lang) -eq 1 ]; then
+			if [ "$(log_lang)" -eq 1 ]; then
 				echolog "  - [$?]不代理 UDP 端口：$UDP_NO_REDIR_PORTS"
 			else
 				echolog "  - [$?]Do not redirect UDP ports：$UDP_NO_REDIR_PORTS"
@@ -1337,7 +1337,7 @@ add_firewall_rule() {
 		sysctl -w net.bridge.bridge-nf-call-iptables=0 >/dev/null 2>&1
 		[ "$PROXY_IPV6" == "1" ] && sysctl -w net.bridge.bridge-nf-call-ip6tables=0 >/dev/null 2>&1
 	}
-	if [ $(log_lang) -eq 1 ]; then
+	if [ "$(log_lang)" -eq 1 ]; then
 		echolog "防火墙规则加载完成！"
 	else
 		echolog "Load firewall rules complete!"
@@ -1382,7 +1382,7 @@ del_firewall_rule() {
 	destroy_ipset $IPSET_BLOCKLIST6
 	destroy_ipset $IPSET_WHITELIST6
 
-	if [ $(log_lang) -eq 1 ]; then
+	if [ "$(log_lang)" -eq 1 ]; then
 		echolog "删除相关防火墙规则完成。"
 	else
 		echolog "Finish deletion of firewall rules"

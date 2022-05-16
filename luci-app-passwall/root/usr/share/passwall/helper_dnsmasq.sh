@@ -59,7 +59,7 @@ logic_restart() {
 	else
 		/etc/init.d/dnsmasq restart >/dev/null 2>&1
 	fi
-	if [ $(log_lang) -eq 1 ]; then
+	if [ "$(log_lang)" -eq 1 ]; then
 		echolog "重启 dnsmasq 服务"
 	else
 		echolog "Restart dnsmasq"
@@ -73,7 +73,7 @@ restart() {
 	_LOG_FILE=$LOG_FILE
 	[ -n "$no_log" ] && LOG_FILE="/dev/null"
 	/etc/init.d/dnsmasq restart >/dev/null 2>&1
-	if [ $(log_lang) -eq 1 ]; then
+	if [ "$(log_lang)" -eq 1 ]; then
 		echolog "重启 dnsmasq 服务"
 	else
 		echolog "Restart dnsmasq"
