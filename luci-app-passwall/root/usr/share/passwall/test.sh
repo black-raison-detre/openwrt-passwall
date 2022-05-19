@@ -292,7 +292,7 @@ test_auto_switch() {
 		else
 			# continual if fail
 			# try restore action if fail count exceed threshold
-			fail_count++
+			fail_count=$(expr $fail_count + 1)
 			[ "$fail_count" -ge "$fail_threshold" ] && {
 				restore_connection
 				fail_count=0
